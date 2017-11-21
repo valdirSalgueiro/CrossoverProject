@@ -1,5 +1,11 @@
 #include "stdafx.h"
+
 #include "Client.h"
+
+#include "client_http.hpp"
+#include "server_http.hpp"
+
+#include "json.hpp"
 #include <windows.h>
 #include <objidl.h>
 #include <gdiplus.h>
@@ -10,6 +16,7 @@
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 #pragma comment (lib,"Pdh.lib")
+using namespace std;
 
 
 // Use to convert bytes to MB
@@ -26,6 +33,8 @@ ATOM                RegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
+
+using HttpClient = SimpleWeb::Client<SimpleWeb::HTTP>;
 
 size_t total_virtual_memory_statistic = 0;
 size_t virtual_memory_currently_used_statistic = 0;
@@ -453,9 +462,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			if (memoryQueue.size() > 10)
 				memoryQueue.pop();
 			memoryQueue.push(rand() % 10);
-			break;
+			return 0;
 		case ID_TIMER_SEND_STATISTICS:
-			break;
+			return 0;
 		}
 
 
