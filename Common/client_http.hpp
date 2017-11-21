@@ -1,5 +1,6 @@
 #ifndef CLIENT_HTTP_HPP
 #define CLIENT_HTTP_HPP
+#define USE_STANDALONE_ASIO
 
 #include "utility.hpp"
 #include <limits>
@@ -7,12 +8,11 @@
 #include <random>
 #include <unordered_set>
 #include <vector>
-#define USE_STANDALONE_ASIO
 
 
 #ifdef USE_STANDALONE_ASIO
-#include <asio.hpp>
-#include <asio/steady_timer.hpp>
+#include "asio.hpp"
+#include "asio/steady_timer.hpp"
 namespace SimpleWeb {
   using error_code = std::error_code;
   using errc = std::errc;

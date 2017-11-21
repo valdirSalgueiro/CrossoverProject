@@ -80,7 +80,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 		pDataArray->val1, pDataArray->val2);
 	StringCchLength(msgBuf, BUF_SIZE, &cchStringSize);
 
-	total_virtual_memory_statistic = total_physical_memory()/DIV;
+	total_virtual_memory_statistic = total_physical_memory() / DIV;
 	virtual_memory_currently_used_statistic = virtual_memory_currently_used() / DIV;
 	virtual_memory_currently_used_by_current_process_statistic = virtual_memory_currently_used_by_current_process() / DIV;
 	total_physical_memory_statistic = total_physical_memory() / DIV;
@@ -193,7 +193,8 @@ public:
 	const_iterator end() const { return this->c.end(); }
 };
 
-int idTimer = -1;
+const int ID_TIMER_REFRESH = 1;
+const int ID_TIMER_SEND_STATISTICS = 2;
 HWND hWnd;
 iterable_queue<int> memoryQueue;
 
@@ -217,7 +218,6 @@ void OnPaint(HDC hdc)
 		L"CPU usage",
 		L"Number of processes",
 		L"Memory usage",
-		
 	};
 
 	int values[8] = {
@@ -225,7 +225,7 @@ void OnPaint(HDC hdc)
 		virtual_memory_currently_used_statistic,
 		virtual_memory_currently_used_by_current_process_statistic,
 		total_physical_memory_statistic,
-		physical_memory_currently_used_statistic, 
+		physical_memory_currently_used_statistic,
 		physical_memory_currently_used_by_current_process_statistic,
 		cpuValue,
 		numberProcesses
@@ -250,7 +250,7 @@ void OnPaint(HDC hdc)
 		if (i <= 8)
 		{
 			RectF rectValue(rectX, rectY + 25, 200, 50);
-			if(i<=6)
+			if (i <= 6)
 				swprintf_s(value, L"%u MB", values[i - 1]);
 			else
 				swprintf_s(value, L"%u", values[i - 1]);
@@ -260,7 +260,7 @@ void OnPaint(HDC hdc)
 				&format,
 				&blackBrush);
 		}
-		else 
+		else
 		{
 			int lastY = 0;
 			int x = 0;
@@ -366,7 +366,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		return FALSE;
 	}
 
-	SetTimer(hWnd, idTimer = 1, 1000, NULL);
+	SetTimer(hWnd, ID_TIMER_REFRESH, 1000, NULL);
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL);
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -417,64 +418,46 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		EndPaint(hWnd, &ps);
 	}
 	break;
-	case WM_SIZE:
+	case WM_TIMER:
 		switch (wParam)
 		{
-		case SIZE_MINIMIZED:
-			// Stop the timer if the window is minimized.
+		case ID_TIMER_REFRESH:
+			pDataArray = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
+				sizeof(MYDATA));
 
-			KillTimer(hWnd, 1);
-			idTimer = -1;
+			if (pDataArray == NULL)
+			{
+				// If the array allocation fails, the system is out of memory
+				// so there is no point in trying to print an error message.
+				// Just terminate execution.
+				ExitProcess(2);
+			}
+
+			// Generate unique data for each thread to work with.
+
+			pDataArray->val1 = 2;
+			pDataArray->val2 = 100;
+
+			// Create the thread to begin execution on its own.
+
+			hThreadArray = CreateThread(
+				NULL,                   // default security attributes
+				0,                      // use default stack size  
+				MyThreadFunction,       // thread function name
+				pDataArray,          // argument to thread function 
+				0,                      // use default creation flags 
+				&dwThreadIdArray);   // returns the thread identifier 
+
+			InvalidateRect(hWnd, NULL, FALSE);
+			UpdateWindow(hWnd);
+			if (memoryQueue.size() > 10)
+				memoryQueue.pop();
+			memoryQueue.push(rand() % 10);
 			break;
-
-		case SIZE_RESTORED:
-			// Fall through to the next case.  
-
-		case SIZE_MAXIMIZED:
-
-			// Start the timer if it had been stopped.  
-
-			if (idTimer == -1)
-				SetTimer(hWnd, idTimer = 1, 1000 / 30, NULL);
+		case ID_TIMER_SEND_STATISTICS:
 			break;
 		}
-		return 0L;
-	case WM_TIMER:
-		pDataArray = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-			sizeof(MYDATA));
 
-		if (pDataArray == NULL)
-		{
-			// If the array allocation fails, the system is out of memory
-			// so there is no point in trying to print an error message.
-			// Just terminate execution.
-			ExitProcess(2);
-		}
-
-		// Generate unique data for each thread to work with.
-
-		pDataArray->val1 = 2;
-		pDataArray->val2 = 100;
-
-		// Create the thread to begin execution on its own.
-
-		hThreadArray = CreateThread(
-			NULL,                   // default security attributes
-			0,                      // use default stack size  
-			MyThreadFunction,       // thread function name
-			pDataArray,          // argument to thread function 
-			0,                      // use default creation flags 
-			&dwThreadIdArray);   // returns the thread identifier 
-
-		InvalidateRect(hWnd, NULL, FALSE);
-		UpdateWindow(hWnd);
-		if (memoryQueue.size() > 10)
-			memoryQueue.pop();
-		memoryQueue.push(rand() % 10);
-		break;
-
-		//case WM_ERASEBKGND:
-		//	return DefWindowProc(hWnd, message, wParam, lParam);
 
 	case WM_DESTROY:
 		PostQuitMessage(0);
