@@ -9,6 +9,11 @@
 #include <strsafe.h>
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
+#pragma comment (lib,"Pdh.lib")
+
+
+// Use to convert bytes to MB
+#define DIV 1048576
 
 
 #define MAX_LOADSTRING 100
@@ -28,10 +33,13 @@ size_t virtual_memory_currently_used_by_current_process_statistic = 0;
 size_t total_physical_memory_statistic = 0;
 size_t physical_memory_currently_used_statistic = 0;
 size_t physical_memory_currently_used_by_current_process_statistic = 0;
+size_t cpuValue = 0;
+size_t numberProcesses = 0;
+
 
 float physical_memory_percent = 0;
 float virtual_memory_percent = 0;
-
+float memory_percent_statistic = 0;
 
 // Sample custom data structure for threads to use.
 // This is passed by void pointer so it can be any data type
@@ -53,6 +61,9 @@ size_t virtual_memory_currently_used_by_current_process();
 size_t total_physical_memory();
 size_t physical_memory_currently_used();
 size_t physical_memory_currently_used_by_current_process();
+size_t memory_percent();
+double getCpuCurrentValue();
+size_t number_of_processes();
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 {
@@ -69,17 +80,40 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 		pDataArray->val1, pDataArray->val2);
 	StringCchLength(msgBuf, BUF_SIZE, &cchStringSize);
 
-	total_virtual_memory_statistic = total_physical_memory();
-	virtual_memory_currently_used_statistic = virtual_memory_currently_used();
-	virtual_memory_currently_used_by_current_process_statistic = virtual_memory_currently_used_by_current_process();
-	total_physical_memory_statistic = total_physical_memory();
-	physical_memory_currently_used_statistic = physical_memory_currently_used();
-	physical_memory_currently_used_by_current_process_statistic = physical_memory_currently_used_by_current_process();
+	total_virtual_memory_statistic = total_physical_memory()/DIV;
+	virtual_memory_currently_used_statistic = virtual_memory_currently_used() / DIV;
+	virtual_memory_currently_used_by_current_process_statistic = virtual_memory_currently_used_by_current_process() / DIV;
+	total_physical_memory_statistic = total_physical_memory() / DIV;
+	physical_memory_currently_used_statistic = physical_memory_currently_used() / DIV;
+	physical_memory_currently_used_by_current_process_statistic = physical_memory_currently_used_by_current_process() / DIV;
 
 	physical_memory_percent = (float)physical_memory_currently_used_statistic / (float)total_physical_memory_statistic;
 	virtual_memory_percent = (float)virtual_memory_currently_used_statistic / (float)total_physical_memory_statistic;
+	memory_percent_statistic = memory_percent();
+	cpuValue = getCpuCurrentValue();
+	numberProcesses = number_of_processes();
 
 	return 0;
+}
+
+#include "pdh.h"
+
+static PDH_HQUERY cpuQuery;
+static PDH_HCOUNTER cpuTotal;
+
+void initCpu() {
+	PdhOpenQuery(NULL, NULL, &cpuQuery);
+	// You can also use L"\\Processor(*)\\% Processor Time" and get individual CPU values with PdhGetFormattedCounterArray()
+	PdhAddEnglishCounter(cpuQuery, "\\Processor(_Total)\\% Processor Time", NULL, &cpuTotal);
+	PdhCollectQueryData(cpuQuery);
+}
+
+double getCpuCurrentValue() {
+	PDH_FMT_COUNTERVALUE counterVal;
+
+	PdhCollectQueryData(cpuQuery);
+	PdhGetFormattedCounterValue(cpuTotal, PDH_FMT_DOUBLE, NULL, &counterVal);
+	return counterVal.doubleValue;
 }
 
 static size_t total_virtual_memory()
@@ -125,6 +159,26 @@ static size_t physical_memory_currently_used_by_current_process()
 	GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
 	return pmc.PrivateUsage;
 }
+static size_t memory_percent()
+{
+	MEMORYSTATUSEX mem_info;
+	mem_info.dwLength = sizeof(mem_info);
+	GlobalMemoryStatusEx(&mem_info);
+	return mem_info.dwMemoryLoad;
+}
+
+static size_t number_of_processes()
+{
+	DWORD aProcesses[1024], cbNeeded, cProcesses;
+	unsigned int i;
+
+	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
+	{
+		return 1;
+	}
+	// Calculate how many process identifiers were returned.
+	return (cbNeeded / sizeof(DWORD));
+}
 
 template<typename T, typename Container = std::deque<T> >
 class iterable_queue : public std::queue<T, Container>
@@ -141,7 +195,7 @@ public:
 
 int idTimer = -1;
 HWND hWnd;
-iterable_queue<int> myqueue;
+iterable_queue<int> memoryQueue;
 
 void OnPaint(HDC hdc)
 {
@@ -149,14 +203,6 @@ void OnPaint(HDC hdc)
 	Pen black(Color(255, 0, 0, 0), 2);
 	graphics.Clear(Color::White);
 	graphics.SetSmoothingMode(SmoothingMode::SmoothingModeAntiAlias);
-	int x = 0;
-	int lastY = 0;
-	for (auto it = myqueue.begin(); it != myqueue.end(); ++it) {
-		int y = *it;
-		graphics.DrawLine(&black, x, 100 - lastY, x + 11, 100 - y);
-		lastY = y;
-		x += 10;
-	}
 
 	// Initialize arguments.
 	Font font(L"Arial", 16);
@@ -164,89 +210,77 @@ void OnPaint(HDC hdc)
 	//format.SetAlignment(StringAlignmentCenter);
 	SolidBrush blackBrush(Color(255, 0, 0, 0));
 
-	WCHAR memoryStr[][] = { TEXT("Memory usage") };
+	WCHAR Str[9][255] = {
+		L"total_virtual_memory", L"virtual_memory_currently_used",
+		L"virtual_memory_currently_used_by_current_process", L"Total Physical Memory(RAM)",
+		L"Physical Memory currently used", L"Physical Memory currently used by current process",
+		L"CPU usage",
+		L"Number of processes",
+		L"Memory usage",
+		
+	};
 
-	RectF memoryUsageRect(0.0f, 0.0f, 200.0f, 50.0f);
-	WCHAR memoryStr[] = L"Memory usage";
-	graphics.DrawString(memoryStr, lstrlenW(memoryStr),
-		&font,
-		memoryUsageRect,
-		&format,
-		&blackBrush);
+	int values[8] = {
+		total_virtual_memory_statistic,
+		virtual_memory_currently_used_statistic,
+		virtual_memory_currently_used_by_current_process_statistic,
+		total_physical_memory_statistic,
+		physical_memory_currently_used_statistic, 
+		physical_memory_currently_used_by_current_process_statistic,
+		cpuValue,
+		numberProcesses
+	};
 
-	WCHAR cpuUsageStr[] = L"CPU usage";
-	RectF cpuUsageRect(0.0f, 100.0f, 200.0f, 50.0f);
-	graphics.DrawString(cpuUsageStr, lstrlenW(cpuUsageStr),
-		&font,
-		cpuUsageRect, 
-		&format,
-		&blackBrush);
+	int rectX = 0;
+	int rectY = 0;
 
-	WCHAR NumberOfProcessesStr[] = L"Number of processes";
-	RectF numberOfProcessesRect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(NumberOfProcessesStr, lstrlenW(NumberOfProcessesStr),
-		&font,
-		numberOfProcessesRect,
-		&format,
-		&blackBrush);
+	int COLS = 3;
 
-	WCHAR TotalVirtualMemoryStr[] = L"total_virtual_memory";
-	RectF TotalVirtualMemoryRect(0.0f, 200.0f, 200.0f, 50.0f);
-	wchar_t value[256];
+	for (int i = 1; i <= 9; i++)
+	{
+		RectF rect(rectX, rectY, 600, 50);
+		wchar_t value[256];
 
-	graphics.DrawString(TotalVirtualMemoryStr, lstrlenW(TotalVirtualMemoryStr),
-		&font,
-		TotalVirtualMemoryRect,
-		&format,
-		&blackBrush);
+		graphics.DrawString(Str[i - 1], lstrlenW(Str[i - 1]),
+			&font,
+			rect,
+			&format,
+			&blackBrush);
 
-	RectF TotalVirtualMemoryValueRect(500.0f, 200.0f, 200.0f, 50.0f);
-	swprintf_s(value, L"%u", total_virtual_memory_statistic);
-	graphics.DrawString(value, lstrlenW(value),
-		&font,
-		TotalVirtualMemoryValueRect,
-		&format,
-		&blackBrush);
+		if (i <= 8)
+		{
+			RectF rectValue(rectX, rectY + 25, 200, 50);
+			if(i<=6)
+				swprintf_s(value, L"%u MB", values[i - 1]);
+			else
+				swprintf_s(value, L"%u", values[i - 1]);
+			graphics.DrawString(value, lstrlenW(value),
+				&font,
+				rectValue,
+				&format,
+				&blackBrush);
+		}
+		else 
+		{
+			int lastY = 0;
+			int x = 0;
+			for (auto it = memoryQueue.begin(); it != memoryQueue.end(); ++it) {
+				int y = *it;
+				graphics.DrawLine(&black, rectX + x, rectY + 40 - lastY, rectX + x + 11, rectY + 40 - y);
+				lastY = y;
+				x += 10;
+			}
+		}
 
-	WCHAR VirtualMemoryCurrentlyUsedStr[] = L"virtual_memory_currently_used";
-	RectF VirtualMemoryCurrentlyUsedRect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(VirtualMemoryCurrentlyUsedStr, lstrlenW(VirtualMemoryCurrentlyUsedStr),
-		&font,
-		VirtualMemoryCurrentlyUsedRect,
-		&format,
-		&blackBrush);
+		rectX += 400;
 
-	WCHAR VirtualMemoryCurrentlyUsedByCurrentProcessStr[] = L"virtual_memory_currently_used_by_current_process";
-	RectF VirtualMemoryCurrentlyUsedByCurrentProcessRect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(VirtualMemoryCurrentlyUsedByCurrentProcessStr, lstrlenW(VirtualMemoryCurrentlyUsedByCurrentProcessStr),
-		&font,
-		VirtualMemoryCurrentlyUsedByCurrentProcessRect,
-		&format,
-		&blackBrush);
+		if (i%COLS == 0)
+		{
+			rectY += 100;
+			rectX = 0;
+		}
+	}
 
-	WCHAR TotalPhysicalMemoryStr[] = L"Total Physical Memory(RAM)";
-	RectF TotalPhysicalMemoryRect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(TotalPhysicalMemoryStr, lstrlenW(TotalPhysicalMemoryStr),
-		&font,
-		TotalPhysicalMemoryRect,
-		&format,
-		&blackBrush);
-
-	WCHAR PhysicalMemoryCurrentlyUsedStr[] = L"Physical Memory currently used";
-	RectF PhysicalMemoryCurrentlyUsedRect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(PhysicalMemoryCurrentlyUsedStr, lstrlenW(PhysicalMemoryCurrentlyUsedStr),
-		&font,
-		PhysicalMemoryCurrentlyUsedRect,
-		&format,
-		&blackBrush);
-
-	WCHAR PhysicalMemoryCurrentlyUsedByCurrentProcessStr[] = L"Physical Memory currently used by current process";
-	RectF PhysicalMemoryCurrentlyUsedrect(0.0f, 200.0f, 200.0f, 50.0f);
-	graphics.DrawString(PhysicalMemoryCurrentlyUsedByCurrentProcessStr, lstrlenW(PhysicalMemoryCurrentlyUsedByCurrentProcessStr),
-		&font,
-		PhysicalMemoryCurrentlyUsedrect,
-		&format,
-		&blackBrush);
 
 }
 
@@ -267,6 +301,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	// Initialize GDI+.
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+
+	initCpu();
 
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_CLIENT, szWindowClass, MAX_LOADSTRING);
@@ -432,9 +468,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		InvalidateRect(hWnd, NULL, FALSE);
 		UpdateWindow(hWnd);
-		if (myqueue.size() > 10)
-			myqueue.pop();
-		myqueue.push(rand() % 10);
+		if (memoryQueue.size() > 10)
+			memoryQueue.pop();
+		memoryQueue.push(rand() % 10);
 		break;
 
 		//case WM_ERASEBKGND:
