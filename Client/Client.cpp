@@ -410,7 +410,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	}
 
 	SetTimer(hWnd, ID_TIMER_REFRESH, 1000, NULL);
-	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 1000, NULL);
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL); 
+	//SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 300000, NULL); // 5minutes
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
