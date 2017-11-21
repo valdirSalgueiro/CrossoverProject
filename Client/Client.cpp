@@ -1,5 +1,7 @@
 #include "stdafx.h"
 
+#include "spdlog/spdlog.h"
+
 #include "Client.h"
 
 #include "client_http.hpp"
@@ -17,11 +19,10 @@ using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 #pragma comment (lib,"Pdh.lib")
 using namespace std;
-
+namespace spd = spdlog;
 
 // Use to convert bytes to MB
 #define DIV 1048576
-
 
 #define MAX_LOADSTRING 100
 
@@ -35,6 +36,7 @@ LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
 INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
 
 using HttpClient = SimpleWeb::Client<SimpleWeb::HTTP>;
+HttpClient* client;
 
 size_t total_virtual_memory_statistic = 0;
 size_t virtual_memory_currently_used_statistic = 0;
@@ -64,6 +66,23 @@ HANDLE  hThreadArray;
 
 #define BUF_SIZE 255
 
+std::shared_ptr<spdlog::logger> logger;
+
+LONG GetStringRegKey(HKEY hKey, const std::wstring &strValueName, std::wstring &strValue, const std::wstring &strDefaultValue)
+{
+	strValue = strDefaultValue;
+	WCHAR szBuffer[512];
+	DWORD dwBufferSize = sizeof(szBuffer);
+	ULONG nError;
+	DWORD dataType = REG_SZ;
+	nError = RegQueryValueExW(hKey, strValueName.c_str(), NULL, &dataType, (LPBYTE)szBuffer, &dwBufferSize);
+	if (ERROR_SUCCESS == nError)
+	{
+		strValue = szBuffer;
+	}
+	return nError;
+}
+
 size_t total_virtual_memory();
 size_t virtual_memory_currently_used();
 size_t virtual_memory_currently_used_by_current_process();
@@ -73,6 +92,7 @@ size_t physical_memory_currently_used_by_current_process();
 size_t memory_percent();
 double getCpuCurrentValue();
 size_t number_of_processes();
+string guid;
 
 DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 {
@@ -289,8 +309,16 @@ void OnPaint(HDC hdc)
 			rectX = 0;
 		}
 	}
+}
 
-
+void getComputerGUID() {
+	HKEY hKey;
+	LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Cryptography", 0, KEY_READ, &hKey);
+	bool bExistsAndSuccess(lRes == ERROR_SUCCESS);
+	bool bDoesNotExistsSpecifically(lRes == ERROR_FILE_NOT_FOUND);
+	std::wstring strValueOfBinDir;
+	std::wstring strKeyDefaultValue;
+	GetStringRegKey(hKey, L"MachineGuid", strValueOfBinDir, L"bad");
 }
 
 #include <time.h>
@@ -312,6 +340,12 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
 	initCpu();
+
+	getComputerGUID();
+
+	client = new HttpClient("localhost:8080"); 
+
+	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");	
 
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_CLIENT, szWindowClass, MAX_LOADSTRING);
@@ -365,7 +399,7 @@ ATOM RegisterClass(HINSTANCE hInstance)
 
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-	hInst = hInstance; // Salvar gerenciador de instância na variável global
+	hInst = hInstance;
 
 	hWnd = CreateWindowW(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, nullptr);
@@ -376,7 +410,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	}
 
 	SetTimer(hWnd, ID_TIMER_REFRESH, 1000, NULL);
-	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL);
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 1000, NULL);
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -391,7 +425,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 	{
 		int wmId = LOWORD(wParam);
-		// Interpreta as seleções do menu:
+		
 		switch (wmId)
 		{
 		case IDM_ABOUT:
@@ -464,6 +498,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			memoryQueue.push(rand() % 10);
 			return 0;
 		case ID_TIMER_SEND_STATISTICS:
+			//async request
+			string json_string = "{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
+			client->request("POST", "/json", json_string, NULL);
+			client->io_service->run();
 			return 0;
 		}
 
