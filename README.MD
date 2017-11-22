@@ -12,7 +12,7 @@ RUNNING
 2) Run x64/Release/server
 3) Run x64/Release/client
 
-Requirements
+REQUIREMENTS
 --------
 
 64 bit machine

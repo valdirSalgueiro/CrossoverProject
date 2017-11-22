@@ -15,11 +15,15 @@
 #include <Psapi.h>
 #include <iostream>
 #include <strsafe.h>
+#include "tinyxml2.h"
+
+
 using namespace Gdiplus;
 #pragma comment (lib,"Gdiplus.lib")
 #pragma comment (lib,"Pdh.lib")
 using namespace std;
 namespace spd = spdlog;
+using json = nlohmann::json;
 
 // Use to convert bytes to MB
 #define DIV 1048576
@@ -127,10 +131,29 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 static PDH_HQUERY cpuQuery;
 static PDH_HCOUNTER cpuTotal;
 std::wstring clientGUID;
+std::string key;
+std::string host;
+std::string email;
+std::map<std::string, std::string> alerts;
+
+void readConfiguration() 
+{
+	tinyxml2::XMLDocument doc;
+	doc.LoadFile("config.xml");	
+	auto client = doc.FirstChildElement("client");
+
+	key = client->Attribute("key");
+	host = client->Attribute("host");
+	email = client->Attribute("mail");
+
+	for (tinyxml2::XMLElement* e = client->FirstChildElement("alert"); e != NULL; e = e->NextSiblingElement("alert"))
+	{
+		alerts[e->Attribute("type")]= e->Attribute("limit");
+	}
+}
 
 void initCpu() {
 	PdhOpenQuery(NULL, NULL, &cpuQuery);
-	// You can also use L"\\Processor(*)\\% Processor Time" and get individual CPU values with PdhGetFormattedCounterArray()
 	PdhAddEnglishCounter(cpuQuery, "\\Processor(_Total)\\% Processor Time", NULL, &cpuTotal);
 	PdhCollectQueryData(cpuQuery);
 }
@@ -322,7 +345,7 @@ void OnPaint(HDC hdc)
 	}
 
 
-	std::wcin >> clientGUID;  // input std::wstring									// Convert to const WCHAR* (read-only access)
+	std::wcin >> clientGUID;  
 	const WCHAR * clientGUIDStr = clientGUID.c_str();
 
 	graphics.DrawString(L"GUID", lstrlenW(L"GUID"),
@@ -364,11 +387,23 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	// Initialize GDI+.
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
+	readConfiguration();
+
+	json j;
+	j["guid"] = key;
+	j["type"] = "authenticate";
+	j["email"] = email;
+	j["alert"]["memory"] = alerts["memory"];
+	j["alert"]["cpu"] = alerts["cpu"];
+	j["alert"]["processes"] = alerts["processes"];
+	client = new HttpClient(host);
+	auto r = client->request("POST", "/json", j.dump());
+	cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
+
 	initCpu();
 
 	getComputerGUID();
 
-	client = new HttpClient("localhost:8080");
 
 	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");
 
@@ -525,9 +560,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			return 0;
 		case ID_TIMER_SEND_STATISTICS:
 			//async request
-			string json_string = "{\"firstName\": \"John\",\"lastName\": \"Smith\",\"age\": 25}";
-			client->request("POST", "/json", json_string, NULL);
-			client->io_service->run();
+			json j;
+			j["guid"] = key;
+			j["type"] = "stats";
+			j["memory"] = (int)memory_percent_statistic;
+			j["cpu"] = (int)cpuValue;
+			j["number_processes"] = (int)numberProcesses;
+			auto r = client->request("POST", "/json", j.dump());
+			cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
 			return 0;
 		}
 
