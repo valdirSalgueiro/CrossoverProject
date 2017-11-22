@@ -13,6 +13,8 @@
 #include <list>
 #include "tinyxml2.h"
 
+#include <stdio.h>
+
 #include "CSmtp.h"
 
 using namespace  sqlite;
@@ -22,34 +24,43 @@ using namespace std;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
 using json = nlohmann::json;
 
-void sendMail();
+
 
 class Stat
 {
 public:
-	Stat(int _memory, int _cpu, int _processes)
+	Stat(int _memory, float _cpu, float _processes)
 	{
 		memory = _memory;
 		cpu = _cpu;
 		processes = _processes;
 	}
 private:
-	int memory;
-	int cpu;
-	int processes;
+	float memory;
+	float cpu;
+	float processes;
 };
 
 class Alert
 {
 public:
-	Alert(std::string _type, int _limit)
+	Alert(std::string _type, float _limit)
 	{
 		type = _type;
 		limit = _limit;
 	}
+	std::string getType()
+	{
+		return type;
+	}
+	float getLimit()
+	{
+		return limit;
+	}
+
 private:
 	std::string type;
-	int limit;
+	float limit;
 };
 
 class ClientMachine
@@ -61,21 +72,31 @@ public:
 	}
 	void AddAlert(Alert alert)
 	{
-		alerts.push_back(alert);
+		alerts[alert.getType()] = alert.getLimit();
+	}
+	float GetAlertLimit(std::string type)
+	{
+		return alerts[type];
 	}
 	void AddStat(Stat stat)
 	{
 		stats.push_back(stat);
 	}
+	bool HasTriggeredAlert(std::string type, float value)
+	{
+		return value > alerts[type];
+	}
 private:
 	std::string email;
 	std::list<Stat> stats;
-	std::list<Alert> alerts;
+	std::map<std::string, float> alerts;
 };
+
+void sendMail(ClientMachine*, int, int, int);
 
 std::map<std::string, ClientMachine*> clients;
 std::string smtp_host;
-std::string smtp_port;
+int smtp_port;
 std::string smtp_login;
 std::string smtp_password;
 std::string smtp_sender;
@@ -85,31 +106,67 @@ void readConfiguration()
 {
 	tinyxml2::XMLDocument doc;
 	doc.LoadFile("server.xml");
-	auto client = doc.FirstChildElement("server");
+	auto server = doc.FirstChildElement("server");
 
-	smtp_host = client->Attribute("smtp_host");
-	smtp_port = client->Attribute("host");
-	smtp_login = client->Attribute("smtp_login");
-	smtp_password = client->IntAttribute("smtp_password");
-	smtp_sender = client->IntAttribute("smtp_sender");
-	smtp_sender_mail = client->IntAttribute("smtp_sender_mail");
+	smtp_host = server->Attribute("smtp_host");
+	smtp_port = server->IntAttribute("smtp_port");
+	smtp_login = server->Attribute("smtp_login");
+	smtp_password = server->Attribute("smtp_password");
+	smtp_sender = server->Attribute("smtp_sender");
+	smtp_sender_mail = server->Attribute("smtp_sender_mail");
 }
+
+database* db;
 
 int main() {
 	cout << "starting server" << endl;
 
+	cout << "loading configurations" << endl;
+
+	readConfiguration();
+
 	cout << "retrieving database" << endl;
 
 	// creates a database file if it does not exists.
-	database db("crossover.db");
+	db = new database("crossover.db");
 
-	// HTTP-server at port 8080 using 1 thread
-	// Unless you do more heavy non-threaded processing in the resources,
-	// 1 thread is usually faster than several threads
+	cout << "retrieving tables" << endl;
+	//populate database with required tables
+	*db <<
+		"create table if not exists ClientMachine ("
+		"   _id integer primary key autoincrement not null,"
+		"   guid text,"
+		"   email text,"
+		"   UNIQUE(guid)"
+		");";
+	*db <<
+		"create table if not exists Alert ("
+		"   _id integer primary key autoincrement not null,"
+		"   guid text,"
+		"   type text,"
+		"   alertlimit numeric"
+		");";
+	*db <<
+		"create table if not exists Stat ("
+		"   _id integer primary key autoincrement not null,"
+		"   guid text,"
+		"   memory real,"
+		"   cpu real,"
+		"   stat_date  text,"
+		"   processes real"
+		");";
+	*db <<
+		"create table if not exists TriggeredAlert ("
+		"   _id integer primary key autoincrement not null,"
+		"   guid text,"
+		"   type text,"
+		"   alertlimit real,"
+		"   alert_date  text,"
+		"   value real"
+		");";
+
 	HttpServer server;
 	server.config.port = 8080;
-
-	sendMail();
 
 	server.resource["^/json$"]["POST"] = [](shared_ptr<HttpServer::Response> response, shared_ptr<HttpServer::Request> request) {
 		try {
@@ -121,13 +178,34 @@ int main() {
 				auto guid = json["guid"].get<std::string>();
 				// check for authentication
 				auto email = json["email"].get<std::string>();
-				auto memoryAlert = json["alert"]["memory"].get<std::string>();
-				auto cpuAlert = json["alert"]["cpu"].get<std::string>();
-				auto processesAlert = json["alert"]["processes"].get<std::string>();
+				auto memory = std::stof(json["alert"]["memory"].get<std::string>());
+				auto cpu = std::stof(json["alert"]["cpu"].get<std::string>());
+				auto processes = std::stof(json["alert"]["processes"].get<std::string>());
 				ClientMachine* machine = new ClientMachine(email);
-				Alert alert("cpu", 50);
-				machine->AddAlert(alert);
+				Alert cpuAlert("cpu", cpu);
+				Alert memoryAlert("memory", memory);
+				Alert processesAlert("processes", memory);
+				machine->AddAlert(cpuAlert);
+				machine->AddAlert(memoryAlert);
+				machine->AddAlert(processesAlert);
 				clients[guid] = machine;
+
+				*db << "delete from Alert where guid = ?;" << guid;
+				*db << "insert or ignore into ClientMachine (guid,email) values (?,?);"
+					<< guid
+					<< email;
+				*db << "insert into Alert (guid, type, alertlimit) values (?,?,?);"
+					<< guid
+					<< "cpu"
+					<< cpu;
+				*db << "insert into Alert (guid, type, alertlimit) values (?,?,?);"
+					<< guid
+					<< "memory"
+					<< memory;
+				*db << "insert into Alert (guid, type, alertlimit) values (?,?,?);"
+					<< guid
+					<< "processes"
+					<< processes;
 			}
 			else if (type == "stats")
 			{
@@ -135,11 +213,51 @@ int main() {
 				// check for authentication
 				if (clients.find(guid) != clients.end())
 				{
-					auto memory = json["memory"].get<int>();
-					auto cpu = json["cpu"].get<int>();
-					auto processes = json["processes"].get<int>();
+					// client is authenticated, good to go
+					auto memory = json["memory"].get<float>();
+					auto cpu = json["cpu"].get<float>();
+					auto processes = json["processes"].get<float>();
 					Stat stat(memory, cpu, processes);
 					clients[guid]->AddStat(stat);
+
+					*db << "insert into Stat (guid, memory, processes, cpu, stat_date) values (?,?,?,?, datetime('now', 'localtime'));"
+						<< guid
+						<< memory
+						<< cpu
+						<< processes;
+
+					bool triggeredAlert;
+					if (clients[guid]->HasTriggeredAlert("cpu", cpu))
+					{
+						*db << "insert into TriggeredAlert (guid, type, alertlimit, value, alert_date) values (?,?,?,?, datetime('now', 'localtime'));"
+							<< guid
+							<< "cpu"
+							<< clients[guid]->GetAlertLimit("cpu")
+							<< cpu;
+						triggeredAlert = true;
+					}
+					if (clients[guid]->HasTriggeredAlert("memory", memory))
+					{
+						*db << "insert into TriggeredAlert (guid, type, alertlimit, value, alert_date) values (?,?,?,?, datetime('now', 'localtime'));"
+							<< guid
+							<< "memory"
+							<< clients[guid]->GetAlertLimit("memory")
+							<< memory;
+						triggeredAlert = true;
+					}
+					if (clients[guid]->HasTriggeredAlert("processes", memory))
+					{
+						*db << "insert into TriggeredAlert (guid, type, alertlimit, value, alert_date) values (?,?,?,?, datetime('now', 'localtime'));"
+							<< guid
+							<< "processes"
+							<< clients[guid]->GetAlertLimit("processes")
+							<< memory;
+						triggeredAlert = true;
+					}
+					if (triggeredAlert)
+					{
+						sendMail(clients[guid], memory, cpu, processes);
+					}
 				}
 			}
 
@@ -165,20 +283,15 @@ int main() {
 	server_thread.join();
 }
 
-void sendMail()
+void sendMail(ClientMachine* machine, int memory, int cpu, int processes)
 {
 	try
 	{
+		std::string message;
+
 		CSmtp mail;
 
-		std::string smtp_host;
-		std::string smtp_port;
-		std::string smtp_login;
-		std::string smtp_password;
-		std::string smtp_sender;
-		std::string smtp_sender_mail;
-
-		mail.SetSMTPServer(smtp_host.c_str(), 587);
+		mail.SetSMTPServer(smtp_host.c_str(), smtp_port);
 		mail.SetSecurityType(USE_TLS);
 		mail.SetLogin(smtp_login.c_str());
 		mail.SetPassword(smtp_password.c_str());
@@ -189,9 +302,16 @@ void sendMail()
 		mail.AddRecipient(smtp_sender_mail.c_str());
 		mail.SetXPriority(XPRIORITY_NORMAL);
 		mail.SetXMailer("The Bat! (v3.02) Professional");
-		mail.AddMsgLine("Hello, you are receinving this message because you configure an alert in Crossover monitoring software.");
+		mail.AddMsgLine("Hello, you are receinving this message because you configure an alert in Crossover monitoring software.\n");
+		mail.AddMsgLine("Alert type\tLimit\t\t\tMeasured Value\n");
+		message = "cpu\t\t\t" + std::to_string(machine->GetAlertLimit("cpu")) + "\t" + std::to_string(cpu) + "\n";
+		mail.AddMsgLine(message.c_str());
+		message = "memory\t\t" + std::to_string(machine->GetAlertLimit("memory")) + "\t" + std::to_string(memory) + "\n";
+		mail.AddMsgLine(message.c_str());
+		message = "processes\t" + std::to_string(machine->GetAlertLimit("processes")) + "\t" + std::to_string(processes) + "\n";
+		mail.AddMsgLine(message.c_str());
 
-		//mail.Send();
+		mail.Send();
 	}
 	catch (ECSmtp e)
 	{

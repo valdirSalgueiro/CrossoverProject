@@ -33,6 +33,8 @@ Sample configuration file for the server (server.xml):
 <server port="8080" smtp_host="smtp.gmail.com" smtp_port="587" smtp_login="crossovertestcpp@gmail.com" smtp_password="yD2JaL3gKu2uGhzW" smtp_sender="crossover test" smtp_sender_mail="crossovertestcpp@gmail.com"/>
 ```
 
+If you use gmail please make sure to turn on https://myaccount.google.com/lesssecureapps unless it will not be possible to login.
+
 LOGS
 ------------
 
@@ -49,6 +51,7 @@ LIBRARIES AND RESPECTIVE LICENSES
 CSmtp - The Code Project Open License (CPOL)
 OpenSSL - OpenSSL License
 TinyXML - Zlib License
+Simple-Web-Server - MIT License
 ASIO network and low-level IO programming -  Boost Software License.
 JSON for Modern C++ - MIT License
 SQLite Modern Cpp - MIT License

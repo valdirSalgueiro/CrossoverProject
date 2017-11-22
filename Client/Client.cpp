@@ -251,17 +251,20 @@ const int ID_TIMER_REFRESH = 1;
 const int ID_TIMER_SEND_STATISTICS = 2;
 HWND hWnd;
 iterable_queue<int> memoryQueue;
+iterable_queue<int> cpuQueue;
 
 void OnPaint(HDC hdc)
 {
 	Graphics graphics(hdc);
-	Pen black(Color(255, 0, 0, 0), 2);
+	Pen black(Color(128, 0, 0, 0), 2);
 	graphics.Clear(Color::White);
 	graphics.SetSmoothingMode(SmoothingMode::SmoothingModeAntiAlias);
 
 	Font font(L"Arial", 16);
 	StringFormat format;
 	SolidBrush blackBrush(Color(255, 0, 0, 0));
+
+	SolidBrush grayBrush(Color(128, 0, 0, 0));
 
 	Font fontMarker(L"Arial", 8);
 	SolidBrush redBrush(Color(255, 255, 0, 0));
@@ -270,8 +273,8 @@ void OnPaint(HDC hdc)
 		L"Total Virtual Memory", L"Virtual Memory Currently Used",
 		L"Virtual Memory Currently Used by Current Process", L"Total Physical Memory(RAM)",
 		L"Physical Memory Currently Used", L"Physical Memory Currently Used by Current Process",
-		L"CPU Usage",
 		L"Number of Processes",
+		L"CPU Usage",
 		L"Memory Usage",
 	};
 
@@ -282,8 +285,8 @@ void OnPaint(HDC hdc)
 		total_physical_memory_statistic,
 		physical_memory_currently_used_statistic,
 		physical_memory_currently_used_by_current_process_statistic,
-		cpuValue,
-		numberProcesses
+		numberProcesses,
+		cpuValue
 	};
 
 	int rectX = 0;
@@ -302,7 +305,7 @@ void OnPaint(HDC hdc)
 			&format,
 			&blackBrush);
 
-		if (i <= 8)
+		if (i <= 7)
 		{
 			RectF rectValue(rectX, rectY + 25, 200, 50);
 			if (i <= 6)
@@ -313,7 +316,30 @@ void OnPaint(HDC hdc)
 				&font,
 				rectValue,
 				&format,
-				&blackBrush);
+				&grayBrush);
+		}
+		else if (i == 8) 
+		{
+			graphics.DrawString(L"100%", lstrlenW(L"100%"),
+				&fontMarker,
+				RectF(rectX - 30, rectY + 25, 50, 20),
+				&format,
+				&redBrush);
+			graphics.DrawString(L"0%", lstrlenW(L"0%"),
+				&fontMarker,
+				RectF(rectX - 30, rectY + 125, 50, 20),
+				&format,
+				&redBrush);
+			if (cpuQueue.size() > 1) {
+				int lastY = cpuQueue.front();
+				int x = 0;
+				for (auto it = cpuQueue.begin(); it != cpuQueue.end(); ++it) {
+					int y = *it;
+					graphics.DrawLine(&black, rectX + x, rectY + 125 - lastY, rectX + x + 11, rectY + 125 - y);
+					lastY = y;
+					x += 10;
+				}
+			}
 		}
 		else
 		{
@@ -324,15 +350,15 @@ void OnPaint(HDC hdc)
 				&redBrush);
 			graphics.DrawString(L"0%", lstrlenW(L"0%"),
 				&fontMarker,
-				RectF(rectX - 30, rectY + 65, 50, 20),
+				RectF(rectX - 30, rectY + 125, 50, 20),
 				&format,
 				&redBrush);
 			if (memoryQueue.size() > 1) {
-				int lastY = memoryQueue.back();
+				int lastY = memoryQueue.front();
 				int x = 0;
 				for (auto it = memoryQueue.begin(); it != memoryQueue.end(); ++it) {
 					int y = *it;
-					graphics.DrawLine(&black, rectX + x, rectY + 65 - lastY, rectX + x + 11, rectY + 65 - y);
+					graphics.DrawLine(&black, rectX + x, rectY + 125 - lastY, rectX + x + 11, rectY + 125 - y);
 					lastY = y;
 					x += 10;
 				}
@@ -354,13 +380,13 @@ void OnPaint(HDC hdc)
 
 	graphics.DrawString(L"GUID", lstrlenW(L"GUID"),
 		&font,
-		RectF(10, rectY + 50, 100, 20),
+		RectF(0, rectY + 100, 100, 20),
 		&format,
-		&redBrush);
+		&blackBrush);
 
 	graphics.DrawString(clientGUIDStr, lstrlenW(clientGUIDStr),
 		&font,
-		RectF(100, rectY + 50, 300, 20),
+		RectF(90, rectY + 100, 300, 20),
 		&format,
 		&redBrush);
 
@@ -479,9 +505,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		return FALSE;
 	}
 
-	SetTimer(hWnd, ID_TIMER_REFRESH, 1000, NULL);
-	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL);
-	//SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 300000, NULL); // 5minutes
+	SetTimer(hWnd, ID_TIMER_REFRESH, refreshInterval, NULL);
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, alertInterval, NULL);
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -538,18 +563,21 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// Create the thread to begin execution on its own.
 
 			hThreadArray = CreateThread(
-				NULL,                  
-				0,                     
-				MyThreadFunction,      
-				pDataArray,          
-				0,                   
-				&dwThreadIdArray);  
+				NULL,
+				0,
+				MyThreadFunction,
+				pDataArray,
+				0,
+				&dwThreadIdArray);
 
 			InvalidateRect(hWnd, NULL, FALSE);
 			UpdateWindow(hWnd);
 			if (memoryQueue.size() > 10)
 				memoryQueue.pop();
-			memoryQueue.push(memory_percent_statistic / 10);
+			memoryQueue.push(memory_percent_statistic);
+			if (cpuQueue.size() > 10)
+				cpuQueue.pop();
+			cpuQueue.push(cpuValue);
 			return 0;
 		case ID_TIMER_SEND_STATISTICS:
 			//async request
@@ -558,16 +586,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			j["type"] = "stats";
 			j["memory"] = (int)memory_percent_statistic;
 			j["cpu"] = (int)cpuValue;
-			j["number_processes"] = (int)numberProcesses;
+			j["processes"] = (int)numberProcesses;
 
 			try {
 				auto r = client->request("POST", "/json", j.dump());
-				cout << r->content.rdbuf() << endl; 
+				cout << r->content.rdbuf() << endl;
 			}
 			catch (const exception &e) {
 				logger->critical("Could not send stats");
 			}
-			
+
 			return 0;
 		}
 
