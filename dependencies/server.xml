@@ -1,0 +1,1 @@
+<server port="8080" smtp_host="smtp.gmail.com" smtp_port="587" smtp_login="crossovertestcpp@gmail.com" smtp_password="yD2JaL3gKu2uGhzW" smtp_sender="crossover test" smtp_sender_mail="crossovertestcpp@gmail.com"/>

@@ -11,6 +11,7 @@
 #include <sqlite_modern_cpp.h>
 #include <map>
 #include <list>
+#include "tinyxml2.h"
 
 #include "CSmtp.h"
 
@@ -73,6 +74,26 @@ private:
 };
 
 std::map<std::string, ClientMachine*> clients;
+std::string smtp_host;
+std::string smtp_port;
+std::string smtp_login;
+std::string smtp_password;
+std::string smtp_sender;
+std::string smtp_sender_mail;
+
+void readConfiguration()
+{
+	tinyxml2::XMLDocument doc;
+	doc.LoadFile("server.xml");
+	auto client = doc.FirstChildElement("server");
+
+	smtp_host = client->Attribute("smtp_host");
+	smtp_port = client->Attribute("host");
+	smtp_login = client->Attribute("smtp_login");
+	smtp_password = client->IntAttribute("smtp_password");
+	smtp_sender = client->IntAttribute("smtp_sender");
+	smtp_sender_mail = client->IntAttribute("smtp_sender_mail");
+}
 
 int main() {
 	cout << "starting server" << endl;
@@ -104,7 +125,6 @@ int main() {
 				auto cpuAlert = json["alert"]["cpu"].get<std::string>();
 				auto processesAlert = json["alert"]["processes"].get<std::string>();
 				ClientMachine* machine = new ClientMachine(email);
-				//machine.AddAlert(new Alert("cpu", cpuAlert)));
 				Alert alert("cpu", 50);
 				machine->AddAlert(alert);
 				clients[guid] = machine;
@@ -113,19 +133,14 @@ int main() {
 			{
 				auto guid = json["guid"].get<std::string>();
 				// check for authentication
-				if (clients.find(guid) != clients.end()) {
-					auto email = json["email"].get<std::string>();
-					auto memoryAlert = json["alert"]["memory"].get<std::string>();
-					auto cpuAlert = json["alert"]["cpu"].get<std::string>();
-					auto processesAlert = json["alert"]["processes"].get<std::string>();
-					ClientMachine* machine = new ClientMachine(email);
-					//machine.AddAlert(new Alert("cpu", cpuAlert)));
-					Alert alert("cpu", 50);
-					machine->AddAlert(alert);
-					clients[guid] = machine;
-
+				if (clients.find(guid) != clients.end())
+				{
+					auto memory = json["memory"].get<int>();
+					auto cpu = json["cpu"].get<int>();
+					auto processes = json["processes"].get<int>();
+					Stat stat(memory, cpu, processes);
+					clients[guid]->AddStat(stat);
 				}
-
 			}
 
 			*response << "HTTP/1.1 200 OK\r\n"
@@ -156,24 +171,25 @@ void sendMail()
 	{
 		CSmtp mail;
 
-		mail.SetSMTPServer("smtp.gmail.com", 587);
+		std::string smtp_host;
+		std::string smtp_port;
+		std::string smtp_login;
+		std::string smtp_password;
+		std::string smtp_sender;
+		std::string smtp_sender_mail;
+
+		mail.SetSMTPServer(smtp_host.c_str(), 587);
 		mail.SetSecurityType(USE_TLS);
-		mail.SetLogin("sombraextra@gmail.com");
-		mail.SetPassword("****");
-		mail.SetSenderName("User");
-		mail.SetSenderMail("sombraextra@gmail.com");
-		mail.SetReplyTo("sombraextra@gmail.com");
-		mail.SetSubject("The message");
-		mail.AddRecipient("sombraextra@gmail.com");
+		mail.SetLogin(smtp_login.c_str());
+		mail.SetPassword(smtp_password.c_str());
+		mail.SetSenderName(smtp_sender.c_str());
+		mail.SetSenderMail(smtp_sender_mail.c_str());
+		mail.SetReplyTo(smtp_sender_mail.c_str());
+		mail.SetSubject("Crossover monitoring alert!");
+		mail.AddRecipient(smtp_sender_mail.c_str());
 		mail.SetXPriority(XPRIORITY_NORMAL);
 		mail.SetXMailer("The Bat! (v3.02) Professional");
-		mail.AddMsgLine("Hello,");
-		mail.AddMsgLine("");
-		mail.AddMsgLine("How are you today?");
-		mail.AddMsgLine("");
-		mail.AddMsgLine("Regards");
-		mail.AddMsgLine("--");
-		mail.AddMsgLine("User");
+		mail.AddMsgLine("Hello, you are receinving this message because you configure an alert in Crossover monitoring software.");
 
 		//mail.Send();
 	}

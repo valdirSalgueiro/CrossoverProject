@@ -12,6 +12,28 @@ RUNNING
 2) Run x64/Release/server
 3) Run x64/Release/client
 
+CONFIGURATION
+------------
+
+Sample configuration file for the client (client.xml):
+
+<client key="f7f9122e-04a5-45f1-83b9-4415f9a5a4f8" refreshInterval="1000" alertInterval="5000" host="localhost:8080" mail="crossovertestcpp@gmail.com">
+ <alert type="memory" limit="50%" />
+ <alert type="cpu" limit="20%" />
+ <alert type="processes" limit="50" />
+</client>
+
+Interval is expressed in milliseconds.
+
+Sample configuration file for the client (client.xml):
+
+<server port="8080" smtp_host="smtp.gmail.com" smtp_port="587" smtp_login="crossovertestcpp@gmail.com" smtp_password="yD2JaL3gKu2uGhzW" smtp_sender="crossover test" smtp_sender_mail="crossovertestcpp@gmail.com"/>
+
+LOGS
+------------
+
+Logs will be saved in logs/log.txt under client binary folder
+
 REQUIREMENTS
 --------
 

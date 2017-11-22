@@ -134,21 +134,25 @@ std::wstring clientGUID;
 std::string key;
 std::string host;
 std::string email;
+int refreshInterval;
+int alertInterval;
 std::map<std::string, std::string> alerts;
 
-void readConfiguration() 
+void readConfiguration()
 {
 	tinyxml2::XMLDocument doc;
-	doc.LoadFile("config.xml");	
+	doc.LoadFile("client.xml");
 	auto client = doc.FirstChildElement("client");
 
 	key = client->Attribute("key");
 	host = client->Attribute("host");
 	email = client->Attribute("mail");
+	refreshInterval = client->IntAttribute("refreshInterval");
+	alertInterval = client->IntAttribute("alertInterval");
 
 	for (tinyxml2::XMLElement* e = client->FirstChildElement("alert"); e != NULL; e = e->NextSiblingElement("alert"))
 	{
-		alerts[e->Attribute("type")]= e->Attribute("limit");
+		alerts[e->Attribute("type")] = e->Attribute("limit");
 	}
 }
 
@@ -345,7 +349,7 @@ void OnPaint(HDC hdc)
 	}
 
 
-	std::wcin >> clientGUID;  
+	std::wcin >> clientGUID;
 	const WCHAR * clientGUIDStr = clientGUID.c_str();
 
 	graphics.DrawString(L"GUID", lstrlenW(L"GUID"),
@@ -389,6 +393,8 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	readConfiguration();
 
+	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");
+
 	json j;
 	j["guid"] = key;
 	j["type"] = "authenticate";
@@ -396,16 +402,20 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	j["alert"]["memory"] = alerts["memory"];
 	j["alert"]["cpu"] = alerts["cpu"];
 	j["alert"]["processes"] = alerts["processes"];
+
 	client = new HttpClient(host);
-	auto r = client->request("POST", "/json", j.dump());
-	cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
+
+	try {
+		auto r = client->request("POST", "/json", j.dump());
+		cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
+	}
+	catch (const exception &e) {
+		logger->critical("Could not authenticate to server");
+	}
 
 	initCpu();
 
 	getComputerGUID();
-
-
-	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");
 
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_CLIENT, szWindowClass, MAX_LOADSTRING);
@@ -483,23 +493,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
 	switch (message)
 	{
-	case WM_COMMAND:
-	{
-		int wmId = LOWORD(wParam);
-
-		switch (wmId)
-		{
-		case IDM_ABOUT:
-			DialogBox(hInst, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, About);
-			break;
-		case IDM_EXIT:
-			DestroyWindow(hWnd);
-			break;
-		default:
-			return DefWindowProc(hWnd, message, wParam, lParam);
-		}
-	}
-	break;
 	case WM_PAINT:
 	{
 		PAINTSTRUCT ps;
@@ -545,12 +538,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			// Create the thread to begin execution on its own.
 
 			hThreadArray = CreateThread(
-				NULL,                   // default security attributes
-				0,                      // use default stack size  
-				MyThreadFunction,       // thread function name
-				pDataArray,          // argument to thread function 
-				0,                      // use default creation flags 
-				&dwThreadIdArray);   // returns the thread identifier 
+				NULL,                  
+				0,                     
+				MyThreadFunction,      
+				pDataArray,          
+				0,                   
+				&dwThreadIdArray);  
 
 			InvalidateRect(hWnd, NULL, FALSE);
 			UpdateWindow(hWnd);
@@ -566,8 +559,15 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			j["memory"] = (int)memory_percent_statistic;
 			j["cpu"] = (int)cpuValue;
 			j["number_processes"] = (int)numberProcesses;
-			auto r = client->request("POST", "/json", j.dump());
-			cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
+
+			try {
+				auto r = client->request("POST", "/json", j.dump());
+				cout << r->content.rdbuf() << endl; 
+			}
+			catch (const exception &e) {
+				logger->critical("Could not send stats");
+			}
+			
 			return 0;
 		}
 
