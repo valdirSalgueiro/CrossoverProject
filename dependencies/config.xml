@@ -1,0 +1,5 @@
+<client key="f7f9122e-04a5-45f1-83b9-4415f9a5a4f8" mail="sombraextra@gmail.com">
+ <alert type="memory" limit="50%" />
+ <alert type="cpu" limit="20%" />
+ <alert type="processes" limit="50" />
+</client>

@@ -52,9 +52,6 @@ float physical_memory_percent = 0;
 float virtual_memory_percent = 0;
 float memory_percent_statistic = 0;
 
-// Sample custom data structure for threads to use.
-// This is passed by void pointer so it can be any data type
-// that can be passed using a single void pointer (LPVOID).
 typedef struct MyData {
 	int val1;
 	int val2;
@@ -129,6 +126,7 @@ DWORD WINAPI MyThreadFunction(LPVOID lpParam)
 
 static PDH_HQUERY cpuQuery;
 static PDH_HCOUNTER cpuTotal;
+std::wstring clientGUID;
 
 void initCpu() {
 	PdhOpenQuery(NULL, NULL, &cpuQuery);
@@ -234,19 +232,20 @@ void OnPaint(HDC hdc)
 	graphics.Clear(Color::White);
 	graphics.SetSmoothingMode(SmoothingMode::SmoothingModeAntiAlias);
 
-	// Initialize arguments.
 	Font font(L"Arial", 16);
 	StringFormat format;
-	//format.SetAlignment(StringAlignmentCenter);
 	SolidBrush blackBrush(Color(255, 0, 0, 0));
 
+	Font fontMarker(L"Arial", 8);
+	SolidBrush redBrush(Color(255, 255, 0, 0));
+
 	WCHAR Str[9][255] = {
-		L"total_virtual_memory", L"virtual_memory_currently_used",
-		L"virtual_memory_currently_used_by_current_process", L"Total Physical Memory(RAM)",
-		L"Physical Memory currently used", L"Physical Memory currently used by current process",
-		L"CPU usage",
-		L"Number of processes",
-		L"Memory usage",
+		L"Total Virtual Memory", L"Virtual Memory Currently Used",
+		L"Virtual Memory Currently Used by Current Process", L"Total Physical Memory(RAM)",
+		L"Physical Memory Currently Used", L"Physical Memory Currently Used by Current Process",
+		L"CPU Usage",
+		L"Number of Processes",
+		L"Memory Usage",
 	};
 
 	int values[8] = {
@@ -291,13 +290,25 @@ void OnPaint(HDC hdc)
 		}
 		else
 		{
-			int lastY = 0;
-			int x = 0;
-			for (auto it = memoryQueue.begin(); it != memoryQueue.end(); ++it) {
-				int y = *it;
-				graphics.DrawLine(&black, rectX + x, rectY + 40 - lastY, rectX + x + 11, rectY + 40 - y);
-				lastY = y;
-				x += 10;
+			graphics.DrawString(L"100%", lstrlenW(L"100%"),
+				&fontMarker,
+				RectF(rectX - 30, rectY + 25, 50, 20),
+				&format,
+				&redBrush);
+			graphics.DrawString(L"0%", lstrlenW(L"0%"),
+				&fontMarker,
+				RectF(rectX - 30, rectY + 65, 50, 20),
+				&format,
+				&redBrush);
+			if (memoryQueue.size() > 1) {
+				int lastY = memoryQueue.back();
+				int x = 0;
+				for (auto it = memoryQueue.begin(); it != memoryQueue.end(); ++it) {
+					int y = *it;
+					graphics.DrawLine(&black, rectX + x, rectY + 65 - lastY, rectX + x + 11, rectY + 65 - y);
+					lastY = y;
+					x += 10;
+				}
 			}
 		}
 
@@ -309,6 +320,23 @@ void OnPaint(HDC hdc)
 			rectX = 0;
 		}
 	}
+
+
+	std::wcin >> clientGUID;  // input std::wstring									// Convert to const WCHAR* (read-only access)
+	const WCHAR * clientGUIDStr = clientGUID.c_str();
+
+	graphics.DrawString(L"GUID", lstrlenW(L"GUID"),
+		&font,
+		RectF(10, rectY + 50, 100, 20),
+		&format,
+		&redBrush);
+
+	graphics.DrawString(clientGUIDStr, lstrlenW(clientGUIDStr),
+		&font,
+		RectF(100, rectY + 50, 300, 20),
+		&format,
+		&redBrush);
+
 }
 
 void getComputerGUID() {
@@ -316,9 +344,7 @@ void getComputerGUID() {
 	LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Cryptography", 0, KEY_READ, &hKey);
 	bool bExistsAndSuccess(lRes == ERROR_SUCCESS);
 	bool bDoesNotExistsSpecifically(lRes == ERROR_FILE_NOT_FOUND);
-	std::wstring strValueOfBinDir;
-	std::wstring strKeyDefaultValue;
-	GetStringRegKey(hKey, L"MachineGuid", strValueOfBinDir, L"bad");
+	GetStringRegKey(hKey, L"MachineGuid", clientGUID, L"bad");
 }
 
 #include <time.h>
@@ -328,7 +354,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_ LPWSTR    lpCmdLine,
 	_In_ int       nCmdShow)
 {
-	srand((unsigned)time(NULL));
 
 	UNREFERENCED_PARAMETER(hPrevInstance);
 	UNREFERENCED_PARAMETER(lpCmdLine);
@@ -343,9 +368,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	getComputerGUID();
 
-	client = new HttpClient("localhost:8080"); 
+	client = new HttpClient("localhost:8080");
 
-	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");	
+	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");
 
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_CLIENT, szWindowClass, MAX_LOADSTRING);
@@ -410,7 +435,7 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	}
 
 	SetTimer(hWnd, ID_TIMER_REFRESH, 1000, NULL);
-	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL); 
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 5000, NULL);
 	//SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, 300000, NULL); // 5minutes
 
 	ShowWindow(hWnd, nCmdShow);
@@ -426,7 +451,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_COMMAND:
 	{
 		int wmId = LOWORD(wParam);
-		
+
 		switch (wmId)
 		{
 		case IDM_ABOUT:
@@ -496,7 +521,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			UpdateWindow(hWnd);
 			if (memoryQueue.size() > 10)
 				memoryQueue.pop();
-			memoryQueue.push(rand() % 10);
+			memoryQueue.push(memory_percent_statistic / 10);
 			return 0;
 		case ID_TIMER_SEND_STATISTICS:
 			//async request
