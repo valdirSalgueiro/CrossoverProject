@@ -39,6 +39,10 @@ DATABASE DIAGRAM
 ---------------
 ![alt er diagaram](https://raw.githubusercontent.com/valdirSalgueiro/CrossoverProject/master/er.png)
 
+SCREENSHOTS
+---------------
+![alt er diagaram](https://raw.githubusercontent.com/valdirSalgueiro/CrossoverProject/master/screenshot.png)
+
 LOGS
 ------------
 
