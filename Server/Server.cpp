@@ -24,8 +24,6 @@ using namespace std;
 using HttpServer = SimpleWeb::Server<SimpleWeb::HTTP>;
 using json = nlohmann::json;
 
-
-
 class Stat
 {
 public:

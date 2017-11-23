@@ -1,406 +1,11 @@
 #include "stdafx.h"
-
-#include "spdlog/spdlog.h"
-
 #include "Client.h"
 
-#include "client_http.hpp"
-#include "server_http.hpp"
-
-#include "json.hpp"
-#include <windows.h>
-#include <objidl.h>
-#include <gdiplus.h>
-#include <queue>
-#include <Psapi.h>
-#include <iostream>
-#include <strsafe.h>
-#include "tinyxml2.h"
-
-
-using namespace Gdiplus;
-#pragma comment (lib,"Gdiplus.lib")
-#pragma comment (lib,"Pdh.lib")
-using namespace std;
-namespace spd = spdlog;
-using json = nlohmann::json;
-
-// Use to convert bytes to MB
-#define DIV 1048576
-
-#define MAX_LOADSTRING 100
-
-HINSTANCE hInst;
-WCHAR szTitle[MAX_LOADSTRING];
-WCHAR szWindowClass[MAX_LOADSTRING];
-
-ATOM                RegisterClass(HINSTANCE hInstance);
-BOOL                InitInstance(HINSTANCE, int);
-LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-INT_PTR CALLBACK    About(HWND, UINT, WPARAM, LPARAM);
-
-using HttpClient = SimpleWeb::Client<SimpleWeb::HTTP>;
-HttpClient* client;
-
-size_t total_virtual_memory_statistic = 0;
-size_t virtual_memory_currently_used_statistic = 0;
-size_t virtual_memory_currently_used_by_current_process_statistic = 0;
-size_t total_physical_memory_statistic = 0;
-size_t physical_memory_currently_used_statistic = 0;
-size_t physical_memory_currently_used_by_current_process_statistic = 0;
-size_t cpuValue = 0;
-size_t numberProcesses = 0;
-
-
-float physical_memory_percent = 0;
-float virtual_memory_percent = 0;
-float memory_percent_statistic = 0;
-
-typedef struct MyData {
-	int val1;
-	int val2;
-} MYDATA, *PMYDATA;
-
-PMYDATA pDataArray;
-DWORD   dwThreadIdArray;
-HANDLE  hThreadArray;
-
-#define BUF_SIZE 255
-
-std::shared_ptr<spdlog::logger> logger;
-
-LONG GetStringRegKey(HKEY hKey, const std::wstring &strValueName, std::wstring &strValue, const std::wstring &strDefaultValue)
+DWORD WINAPI StatsThread(LPVOID lpParam)
 {
-	strValue = strDefaultValue;
-	WCHAR szBuffer[512];
-	DWORD dwBufferSize = sizeof(szBuffer);
-	ULONG nError;
-	DWORD dataType = REG_SZ;
-	nError = RegQueryValueExW(hKey, strValueName.c_str(), NULL, &dataType, (LPBYTE)szBuffer, &dwBufferSize);
-	if (ERROR_SUCCESS == nError)
-	{
-		strValue = szBuffer;
-	}
-	return nError;
-}
-
-size_t total_virtual_memory();
-size_t virtual_memory_currently_used();
-size_t virtual_memory_currently_used_by_current_process();
-size_t total_physical_memory();
-size_t physical_memory_currently_used();
-size_t physical_memory_currently_used_by_current_process();
-size_t memory_percent();
-double getCpuCurrentValue();
-size_t number_of_processes();
-string guid;
-
-DWORD WINAPI MyThreadFunction(LPVOID lpParam)
-{
-	HANDLE hStdout;
-	PMYDATA pDataArray;
-
-	TCHAR msgBuf[BUF_SIZE];
-	size_t cchStringSize;
-	DWORD dwChars;
-
-	pDataArray = (PMYDATA)lpParam;
-
-	StringCchPrintf(msgBuf, BUF_SIZE, TEXT("Parameters = %d, %d\n"),
-		pDataArray->val1, pDataArray->val2);
-	StringCchLength(msgBuf, BUF_SIZE, &cchStringSize);
-
-	total_virtual_memory_statistic = total_physical_memory() / DIV;
-	virtual_memory_currently_used_statistic = virtual_memory_currently_used() / DIV;
-	virtual_memory_currently_used_by_current_process_statistic = virtual_memory_currently_used_by_current_process() / DIV;
-	total_physical_memory_statistic = total_physical_memory() / DIV;
-	physical_memory_currently_used_statistic = physical_memory_currently_used() / DIV;
-	physical_memory_currently_used_by_current_process_statistic = physical_memory_currently_used_by_current_process() / DIV;
-
-	physical_memory_percent = (float)physical_memory_currently_used_statistic / (float)total_physical_memory_statistic;
-	virtual_memory_percent = (float)virtual_memory_currently_used_statistic / (float)total_physical_memory_statistic;
-	memory_percent_statistic = memory_percent();
-	cpuValue = getCpuCurrentValue();
-	numberProcesses = number_of_processes();
-
+	metrics->updateMetrics();
 	return 0;
 }
-
-#include "pdh.h"
-
-static PDH_HQUERY cpuQuery;
-static PDH_HCOUNTER cpuTotal;
-std::wstring clientGUID;
-std::string key;
-std::string host;
-std::string email;
-int refreshInterval;
-int alertInterval;
-std::map<std::string, std::string> alerts;
-
-void readConfiguration()
-{
-	tinyxml2::XMLDocument doc;
-	doc.LoadFile("client.xml");
-	auto client = doc.FirstChildElement("client");
-
-	key = client->Attribute("key");
-	host = client->Attribute("host");
-	email = client->Attribute("mail");
-	refreshInterval = client->IntAttribute("refreshInterval");
-	alertInterval = client->IntAttribute("alertInterval");
-
-	for (tinyxml2::XMLElement* e = client->FirstChildElement("alert"); e != NULL; e = e->NextSiblingElement("alert"))
-	{
-		alerts[e->Attribute("type")] = e->Attribute("limit");
-	}
-}
-
-void initCpu() {
-	PdhOpenQuery(NULL, NULL, &cpuQuery);
-	PdhAddEnglishCounter(cpuQuery, "\\Processor(_Total)\\% Processor Time", NULL, &cpuTotal);
-	PdhCollectQueryData(cpuQuery);
-}
-
-double getCpuCurrentValue() {
-	PDH_FMT_COUNTERVALUE counterVal;
-
-	PdhCollectQueryData(cpuQuery);
-	PdhGetFormattedCounterValue(cpuTotal, PDH_FMT_DOUBLE, NULL, &counterVal);
-	return counterVal.doubleValue;
-}
-
-static size_t total_virtual_memory()
-{
-	MEMORYSTATUSEX mem_info;
-	mem_info.dwLength = sizeof(mem_info);
-	GlobalMemoryStatusEx(&mem_info);
-	return mem_info.ullTotalPageFile;
-}
-static size_t virtual_memory_currently_used()
-{
-	MEMORYSTATUSEX mem_info;
-	mem_info.dwLength = sizeof(mem_info);
-	GlobalMemoryStatusEx(&mem_info);
-	return mem_info.ullTotalPageFile - mem_info.ullAvailPageFile;
-}
-static size_t virtual_memory_currently_used_by_current_process()
-{
-	PROCESS_MEMORY_COUNTERS_EX pmc;
-	pmc.cb = sizeof(pmc);
-	GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-	return pmc.PrivateUsage;
-}
-
-static size_t total_physical_memory()
-{
-	MEMORYSTATUSEX mem_info;
-	mem_info.dwLength = sizeof(mem_info);
-	GlobalMemoryStatusEx(&mem_info);
-	return mem_info.ullTotalPhys;
-}
-static size_t physical_memory_currently_used()
-{
-	MEMORYSTATUSEX mem_info;
-	mem_info.dwLength = sizeof(mem_info);
-	GlobalMemoryStatusEx(&mem_info);
-	return mem_info.ullTotalPhys - mem_info.ullAvailPhys;
-}
-static size_t physical_memory_currently_used_by_current_process()
-{
-	PROCESS_MEMORY_COUNTERS_EX pmc;
-	pmc.cb = sizeof(pmc);
-	GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS*)&pmc, sizeof(pmc));
-	return pmc.PrivateUsage;
-}
-static size_t memory_percent()
-{
-	MEMORYSTATUSEX mem_info;
-	mem_info.dwLength = sizeof(mem_info);
-	GlobalMemoryStatusEx(&mem_info);
-	return mem_info.dwMemoryLoad;
-}
-
-static size_t number_of_processes()
-{
-	DWORD aProcesses[1024], cbNeeded, cProcesses;
-	unsigned int i;
-
-	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
-	{
-		return 1;
-	}
-	// Calculate how many process identifiers were returned.
-	return (cbNeeded / sizeof(DWORD));
-}
-
-template<typename T, typename Container = std::deque<T> >
-class iterable_queue : public std::queue<T, Container>
-{
-public:
-	typedef typename Container::iterator iterator;
-	typedef typename Container::const_iterator const_iterator;
-
-	iterator begin() { return this->c.begin(); }
-	iterator end() { return this->c.end(); }
-	const_iterator begin() const { return this->c.begin(); }
-	const_iterator end() const { return this->c.end(); }
-};
-
-const int ID_TIMER_REFRESH = 1;
-const int ID_TIMER_SEND_STATISTICS = 2;
-HWND hWnd;
-iterable_queue<int> memoryQueue;
-iterable_queue<int> cpuQueue;
-
-void OnPaint(HDC hdc)
-{
-	Graphics graphics(hdc);
-	Pen black(Color(128, 0, 0, 0), 2);
-	graphics.Clear(Color::White);
-	graphics.SetSmoothingMode(SmoothingMode::SmoothingModeAntiAlias);
-
-	Font font(L"Arial", 16);
-	StringFormat format;
-	SolidBrush blackBrush(Color(255, 0, 0, 0));
-
-	SolidBrush grayBrush(Color(128, 0, 0, 0));
-
-	Font fontMarker(L"Arial", 8);
-	SolidBrush redBrush(Color(255, 255, 0, 0));
-
-	WCHAR Str[9][255] = {
-		L"Total Virtual Memory", L"Virtual Memory Currently Used",
-		L"Virtual Memory Currently Used by Current Process", L"Total Physical Memory(RAM)",
-		L"Physical Memory Currently Used", L"Physical Memory Currently Used by Current Process",
-		L"Number of Processes",
-		L"CPU Usage",
-		L"Memory Usage",
-	};
-
-	int values[8] = {
-		total_virtual_memory_statistic,
-		virtual_memory_currently_used_statistic,
-		virtual_memory_currently_used_by_current_process_statistic,
-		total_physical_memory_statistic,
-		physical_memory_currently_used_statistic,
-		physical_memory_currently_used_by_current_process_statistic,
-		numberProcesses,
-		cpuValue
-	};
-
-	int rectX = 0;
-	int rectY = 0;
-
-	int COLS = 3;
-
-	for (int i = 1; i <= 9; i++)
-	{
-		RectF rect(rectX, rectY, 600, 50);
-		wchar_t value[256];
-
-		graphics.DrawString(Str[i - 1], lstrlenW(Str[i - 1]),
-			&font,
-			rect,
-			&format,
-			&blackBrush);
-
-		if (i <= 7)
-		{
-			RectF rectValue(rectX, rectY + 25, 200, 50);
-			if (i <= 6)
-				swprintf_s(value, L"%u MB", values[i - 1]);
-			else
-				swprintf_s(value, L"%u", values[i - 1]);
-			graphics.DrawString(value, lstrlenW(value),
-				&font,
-				rectValue,
-				&format,
-				&grayBrush);
-		}
-		else if (i == 8) 
-		{
-			graphics.DrawString(L"100%", lstrlenW(L"100%"),
-				&fontMarker,
-				RectF(rectX - 30, rectY + 25, 50, 20),
-				&format,
-				&redBrush);
-			graphics.DrawString(L"0%", lstrlenW(L"0%"),
-				&fontMarker,
-				RectF(rectX - 30, rectY + 125, 50, 20),
-				&format,
-				&redBrush);
-			if (cpuQueue.size() > 1) {
-				int lastY = cpuQueue.front();
-				int x = 0;
-				for (auto it = cpuQueue.begin(); it != cpuQueue.end(); ++it) {
-					int y = *it;
-					graphics.DrawLine(&black, rectX + x, rectY + 125 - lastY, rectX + x + 11, rectY + 125 - y);
-					lastY = y;
-					x += 10;
-				}
-			}
-		}
-		else
-		{
-			graphics.DrawString(L"100%", lstrlenW(L"100%"),
-				&fontMarker,
-				RectF(rectX - 30, rectY + 25, 50, 20),
-				&format,
-				&redBrush);
-			graphics.DrawString(L"0%", lstrlenW(L"0%"),
-				&fontMarker,
-				RectF(rectX - 30, rectY + 125, 50, 20),
-				&format,
-				&redBrush);
-			if (memoryQueue.size() > 1) {
-				int lastY = memoryQueue.front();
-				int x = 0;
-				for (auto it = memoryQueue.begin(); it != memoryQueue.end(); ++it) {
-					int y = *it;
-					graphics.DrawLine(&black, rectX + x, rectY + 125 - lastY, rectX + x + 11, rectY + 125 - y);
-					lastY = y;
-					x += 10;
-				}
-			}
-		}
-
-		rectX += 400;
-
-		if (i%COLS == 0)
-		{
-			rectY += 100;
-			rectX = 0;
-		}
-	}
-
-
-	std::wcin >> clientGUID;
-	const WCHAR * clientGUIDStr = clientGUID.c_str();
-
-	graphics.DrawString(L"GUID", lstrlenW(L"GUID"),
-		&font,
-		RectF(0, rectY + 100, 100, 20),
-		&format,
-		&blackBrush);
-
-	graphics.DrawString(clientGUIDStr, lstrlenW(clientGUIDStr),
-		&font,
-		RectF(90, rectY + 100, 300, 20),
-		&format,
-		&redBrush);
-
-}
-
-void getComputerGUID() {
-	HKEY hKey;
-	LONG lRes = RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"Software\\Microsoft\\Cryptography", 0, KEY_READ, &hKey);
-	bool bExistsAndSuccess(lRes == ERROR_SUCCESS);
-	bool bDoesNotExistsSpecifically(lRes == ERROR_FILE_NOT_FOUND);
-	GetStringRegKey(hKey, L"MachineGuid", clientGUID, L"bad");
-}
-
-#include <time.h>
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -417,31 +22,19 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	// Initialize GDI+.
 	GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
 
-	readConfiguration();
+	render = new Render();
+
+	configuration = new ConfigurationManager();
+	configuration->readConfiguration();	
 
 	logger = spd::basic_logger_mt("crossover computer monitoring", "logs/log.txt");
+	http = new HttpHelper(configuration, logger);
+	metrics = new Metrics();
 
-	json j;
-	j["guid"] = key;
-	j["type"] = "authenticate";
-	j["email"] = email;
-	j["alert"]["memory"] = alerts["memory"];
-	j["alert"]["cpu"] = alerts["cpu"];
-	j["alert"]["processes"] = alerts["processes"];
 
-	client = new HttpClient(host);
+	http->sendAuthentication();
 
-	try {
-		auto r = client->request("POST", "/json", j.dump());
-		cout << r->content.rdbuf() << endl; // Alternatively, use the convenience function r1->content.string()
-	}
-	catch (const exception &e) {
-		logger->critical("Could not authenticate to server");
-	}
-
-	initCpu();
-
-	getComputerGUID();
+	metrics->initCpu();
 
 	LoadStringW(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
 	LoadStringW(hInstance, IDC_CLIENT, szWindowClass, MAX_LOADSTRING);
@@ -468,8 +61,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 
 	return (int)msg.wParam;
 }
-
-
 
 ATOM RegisterClass(HINSTANCE hInstance)
 {
@@ -505,8 +96,8 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		return FALSE;
 	}
 
-	SetTimer(hWnd, ID_TIMER_REFRESH, refreshInterval, NULL);
-	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, alertInterval, NULL);
+	SetTimer(hWnd, ID_TIMER_REFRESH, configuration->getRefreshInterval(), NULL);
+	SetTimer(hWnd, ID_TIMER_SEND_STATISTICS, configuration->getAlertInterval(), NULL);
 
 	ShowWindow(hWnd, nCmdShow);
 	UpdateWindow(hWnd);
@@ -520,6 +111,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	{
 	case WM_PAINT:
 	{
+		//double buffering
+
 		PAINTSTRUCT ps;
 		RECT Client_Rect;
 		GetClientRect(hWnd, &Client_Rect);
@@ -532,7 +125,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		Memhdc = CreateCompatibleDC(hdc);
 		Membitmap = CreateCompatibleBitmap(hdc, win_width, win_height);
 		SelectObject(Memhdc, Membitmap);
-		OnPaint(Memhdc);
+		
+		// call our render
+		render->draw(Memhdc, metrics);
+
 		BitBlt(hdc, 0, 0, win_width, win_height, Memhdc, 0, 0, SRCCOPY);
 		DeleteObject(Membitmap);
 		DeleteDC(Memhdc);
@@ -544,63 +140,32 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		switch (wParam)
 		{
 		case ID_TIMER_REFRESH:
-			pDataArray = (PMYDATA)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY,
-				sizeof(MYDATA));
-
-			if (pDataArray == NULL)
-			{
-				// If the array allocation fails, the system is out of memory
-				// so there is no point in trying to print an error message.
-				// Just terminate execution.
-				ExitProcess(2);
-			}
-
-			// Generate unique data for each thread to work with.
-
-			pDataArray->val1 = 2;
-			pDataArray->val2 = 100;
-
-			// Create the thread to begin execution on its own.
-
-			hThreadArray = CreateThread(
+			hThread = CreateThread(
 				NULL,
 				0,
-				MyThreadFunction,
-				pDataArray,
+				StatsThread,
+				NULL,
 				0,
-				&dwThreadIdArray);
+				&dwThreadId);
 
 			InvalidateRect(hWnd, NULL, FALSE);
 			UpdateWindow(hWnd);
-			if (memoryQueue.size() > 10)
-				memoryQueue.pop();
-			memoryQueue.push(memory_percent_statistic);
-			if (cpuQueue.size() > 10)
-				cpuQueue.pop();
-			cpuQueue.push(cpuValue);
+
+			metrics->updateQueues();
+
 			return 0;
 		case ID_TIMER_SEND_STATISTICS:
-			//async request
-			json j;
-			j["guid"] = key;
-			j["type"] = "stats";
-			j["memory"] = (int)memory_percent_statistic;
-			j["cpu"] = (int)cpuValue;
-			j["processes"] = (int)numberProcesses;
-
-			try {
-				auto r = client->request("POST", "/json", j.dump());
-				cout << r->content.rdbuf() << endl;
-			}
-			catch (const exception &e) {
-				logger->critical("Could not send stats");
-			}
+			http->sendStats(metrics);
 
 			return 0;
 		}
 
 
 	case WM_DESTROY:
+		delete render;
+		delete configuration;
+		delete http;
+		delete metrics;
 		PostQuitMessage(0);
 		break;
 	default:

@@ -13,6 +13,24 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty">
+      <UniqueIdentifier>{7f9865b2-9f71-463c-b140-5c17a705976e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty\smtp">
+      <UniqueIdentifier>{100af112-a19d-4c5a-bb23-b6b22bf37c19}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty\database">
+      <UniqueIdentifier>{324dc45b-d0e1-4fab-af07-ef07f2b7231a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty\xml">
+      <UniqueIdentifier>{52ff0f68-075f-4009-b5dc-7c520004accd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty\http">
+      <UniqueIdentifier>{1d3cb8ab-5b8d-4db8-bd36-cd72e1fbda36}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src">
+      <UniqueIdentifier>{4ca85ce5-3920-4477-b9fa-dfbdd4d02d8d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stdafx.h">
@@ -22,36 +40,36 @@
       <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
     <ClInclude Include="client_http.hpp">
-      <Filter>Arquivos de Origem</Filter>
-    </ClInclude>
-    <ClInclude Include="server_http.hpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\thirdparty\http</Filter>
     </ClInclude>
     <ClInclude Include="utility.hpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\thirdparty\http</Filter>
+    </ClInclude>
+    <ClInclude Include="server_http.hpp">
+      <Filter>Arquivos de Origem\thirdparty\http</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="stdafx.cpp">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
-    <ClCompile Include="Server.cpp">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Common\sqlite3.c">
-      <Filter>Arquivos de Origem</Filter>
+    <ClCompile Include="..\Common\base64.cpp">
+      <Filter>Arquivos de Origem\thirdparty\smtp</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\CSmtp.cpp">
-      <Filter>Arquivos de Origem</Filter>
-    </ClCompile>
-    <ClCompile Include="..\Common\base64.cpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\thirdparty\smtp</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\md5.cpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\thirdparty\smtp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\sqlite3.c">
+      <Filter>Arquivos de Origem\thirdparty\database</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\tinyxml2.cpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\thirdparty\xml</Filter>
+    </ClCompile>
+    <ClCompile Include="Server.cpp">
+      <Filter>Arquivos de Origem\src</Filter>
+    </ClCompile>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Arquivos de Origem\src</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>

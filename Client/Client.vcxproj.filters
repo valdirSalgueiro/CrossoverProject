@@ -13,11 +13,29 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty">
+      <UniqueIdentifier>{f1989656-8d4a-46f9-b9b9-2b91a8a28278}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\thirdparty\xml">
+      <UniqueIdentifier>{fdf114f3-9031-46f3-9549-d921a8e4308f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src">
+      <UniqueIdentifier>{00dfb430-c442-4405-92e6-31537fab31d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src\metrics">
+      <UniqueIdentifier>{d3aa8ee8-c1d8-47b8-a89f-84b234835717}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src\render">
+      <UniqueIdentifier>{2f23c462-467a-40fa-9175-aa8be0f8731a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src\configuration">
+      <UniqueIdentifier>{4369edc5-89f2-48d2-a64a-cfcca90cf6ba}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Arquivos de Origem\src\http">
+      <UniqueIdentifier>{1ff1229d-2cc9-42cb-b2b6-c56ae4189662}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="stdafx.h">
-      <Filter>Arquivos de Cabeçalho</Filter>
-    </ClInclude>
     <ClInclude Include="targetver.h">
       <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
@@ -27,16 +45,52 @@
     <ClInclude Include="Client.h">
       <Filter>Arquivos de Cabeçalho</Filter>
     </ClInclude>
+    <ClInclude Include="Metrics.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="Render.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="IterableQueue.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="LogManager.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="ConfigurationManager.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
+    <ClInclude Include="HttpHelper.h">
+      <Filter>Arquivos de Cabeçalho</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="stdafx.cpp">
-      <Filter>Arquivos de Origem</Filter>
+    <ClCompile Include="..\Common\tinyxml2.cpp">
+      <Filter>Arquivos de Origem\thirdparty\xml</Filter>
     </ClCompile>
     <ClCompile Include="Client.cpp">
-      <Filter>Arquivos de Origem</Filter>
+      <Filter>Arquivos de Origem\src</Filter>
     </ClCompile>
-    <ClCompile Include="..\Common\tinyxml2.cpp">
-      <Filter>Arquivos de Origem</Filter>
+    <ClCompile Include="stdafx.cpp">
+      <Filter>Arquivos de Origem\src</Filter>
+    </ClCompile>
+    <ClCompile Include="Metrics.cpp">
+      <Filter>Arquivos de Origem\src\metrics</Filter>
+    </ClCompile>
+    <ClCompile Include="Render.cpp">
+      <Filter>Arquivos de Origem\src\render</Filter>
+    </ClCompile>
+    <ClCompile Include="ConfigurationManager.cpp">
+      <Filter>Arquivos de Origem\src\configuration</Filter>
+    </ClCompile>
+    <ClCompile Include="HttpHelper.cpp">
+      <Filter>Arquivos de Origem\src\http</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
