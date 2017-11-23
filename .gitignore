@@ -1,3 +1,5 @@
 .vs/
 Client/Debug/
 Debug/
+Client/x64/
+Server/x64/
