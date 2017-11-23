@@ -142,7 +142,8 @@ int main() {
 		"   _id integer primary key autoincrement not null,"
 		"   guid text,"
 		"   type text,"
-		"   alertlimit numeric"
+		"   alertlimit numeric,"
+		"	FOREIGN KEY(guid) REFERENCES ClientMachine(guid)"
 		");";
 	*db <<
 		"create table if not exists Stat ("
@@ -151,7 +152,8 @@ int main() {
 		"   memory real,"
 		"   cpu real,"
 		"   stat_date  text,"
-		"   processes real"
+		"   processes real,"
+		"	FOREIGN KEY(guid) REFERENCES ClientMachine(guid)"
 		");";
 	*db <<
 		"create table if not exists TriggeredAlert ("
@@ -160,7 +162,8 @@ int main() {
 		"   type text,"
 		"   alertlimit real,"
 		"   alert_date  text,"
-		"   value real"
+		"   value real,"
+		"	FOREIGN KEY(guid) REFERENCES ClientMachine(guid)"
 		");";
 
 	HttpServer server;
