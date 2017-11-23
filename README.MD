@@ -35,6 +35,10 @@ Sample configuration file for the server (server.xml):
 
 If you use gmail please make sure to turn on https://myaccount.google.com/lesssecureapps unless it will not be possible to login.
 
+DATABASE DIAGRAM
+---------------
+![alt er diagaram](https://raw.githubusercontent.com/valdirSalgueiro/CrossoverProject/master/er.png)
+
 LOGS
 ------------
 
